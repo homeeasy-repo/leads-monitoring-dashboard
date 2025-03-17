@@ -32,13 +32,11 @@ def load_client_data(start_date=None, end_date=None, state=None, budget_sort=Non
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     query = """
-    SELECT 
-        c.id, c.fullname, c.created, c.fphone1, c.assigned_employee_name, c.addresses, c.assigned_employee,
-        r.move_in_date, r.budget, r.budget_max, r.beds, r.baths, r.moving_reason, r.credit_score, r.neighborhood
-    FROM 
-        client c
-    LEFT JOIN 
-        requirements r ON c.id = r.client_id
+    SELECT DISTINCT ON (c.id)
+    c.id, c.fullname, c.created, c.fphone1, c.assigned_employee_name, c.addresses, c.assigned_employee,
+    r.move_in_date, r.budget, r.budget_max, r.beds, r.baths, r.moving_reason, r.credit_score, r.neighborhood
+    FROM client c
+    LEFT JOIN requirements r ON c.id = r.client_id
     WHERE 1=1
     """
     
@@ -53,12 +51,47 @@ def load_client_data(start_date=None, end_date=None, state=None, budget_sort=Non
         query += " AND c.addresses::text LIKE %s"
         params.append(f'%"state": "{state}"%')
     
+    # if requirements_status == "Requirements Gathered":
+    #     query += " AND r.budget IS NOT NULL AND r.move_in_date IS NOT NULL AND r.moving_reason IS NOT NULL AND r.credit_score IS NOT NULL AND r.neighborhood IS NOT NULL"
+    # elif requirements_status == "Partial Requirements":
+    #     query += " AND r.client_id IS NOT NULL AND (r.budget IS NULL OR r.move_in_date IS NULL OR r.moving_reason IS NULL OR r.credit_score IS NULL OR r.neighborhood IS NULL)"
+    # elif requirements_status == "No Requirements":
+    #     query += " AND r.client_id IS NULL"
     if requirements_status == "Requirements Gathered":
-        query += " AND r.budget IS NOT NULL AND r.move_in_date IS NOT NULL AND r.moving_reason IS NOT NULL AND r.credit_score IS NOT NULL AND r.neighborhood IS NOT NULL"
+        query += """
+            AND r.budget IS NOT NULL AND r.move_in_date IS NOT NULL 
+            AND r.moving_reason IS NOT NULL AND r.credit_score IS NOT NULL 
+            AND r.neighborhood IS NOT NULL
+        """
     elif requirements_status == "Partial Requirements":
-        query += " AND r.client_id IS NOT NULL AND (r.budget IS NULL OR r.move_in_date IS NULL OR r.moving_reason IS NULL OR r.credit_score IS NULL OR r.neighborhood IS NULL)"
+        query += """
+            AND r.client_id IS NOT NULL 
+            AND (
+                r.budget IS NOT NULL OR 
+                r.move_in_date IS NOT NULL OR 
+                r.moving_reason IS NOT NULL OR 
+                r.credit_score IS NOT NULL OR 
+                r.neighborhood IS NOT NULL
+            )
+            AND (
+                r.budget IS NULL OR 
+                r.move_in_date IS NULL OR 
+                r.moving_reason IS NULL OR 
+                r.credit_score IS NULL OR 
+                r.neighborhood IS NULL
+            )
+        """
     elif requirements_status == "No Requirements":
-        query += " AND r.client_id IS NULL"
+        query += """
+            AND r.client_id IS NOT NULL 
+            AND (
+                r.budget IS NULL AND 
+                r.move_in_date IS NULL AND 
+                r.moving_reason IS NULL AND 
+                r.credit_score IS NULL AND 
+                r.neighborhood IS NULL
+            )
+        """
     
     if employee_type == "Amy Accounts":
         query += " AND c.assigned_employee IN (317, 318, 319, 410, 415, 416)"

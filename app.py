@@ -32,11 +32,13 @@ def load_client_data(start_date=None, end_date=None, state=None, budget_sort=Non
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     query = """
-    SELECT DISTINCT ON (c.id)
-    c.id, c.fullname, c.created, c.fphone1, c.assigned_employee_name, c.addresses, c.assigned_employee,
-    r.move_in_date, r.budget, r.budget_max, r.beds, r.baths, r.moving_reason, r.credit_score, r.neighborhood
-    FROM client c
-    LEFT JOIN requirements r ON c.id = r.client_id
+    SELECT 
+        c.id, c.fullname, c.created, c.fphone1, c.assigned_employee_name, c.addresses, c.assigned_employee,
+        r.move_in_date, r.budget, r.budget_max, r.beds, r.baths, r.moving_reason, r.credit_score, r.neighborhood
+    FROM 
+        client c
+    LEFT JOIN 
+        requirements r ON c.id = r.client_id
     WHERE 1=1
     """
     

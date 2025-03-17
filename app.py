@@ -5,6 +5,7 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 import json
 import numpy as np
+import requests
 
 # Set page configuration
 st.set_page_config(
@@ -109,6 +110,28 @@ def extract_address_info(addresses_json):
     except:
         return {"city": "", "state": ""}
 
+
+# Function to create FUB URL
+def create_fub_url(client_id):
+    return f"https://services.followupboss.com/2/people/view/{client_id}"
+
+
+def find_inventory_for_client(client_id):
+    """
+    Makes a request to find building options for a client and returns the status
+    """
+    BUILDING_OPTIONS_URL = st.secrets["buildingURL"]["BUILDING_OPTIONS_URL"]
+    url = f"{BUILDING_OPTIONS_URL}/find_building_options/{client_id}/0"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            return True, "Building Options has been pushed on Slack -- inventory-note channel. Note: It might take time sometime up to 2-3 min."
+        else:
+            return False, f"Error: Received status code {response.status_code}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+
 st.title("Client Dashboard")
 st.markdown("View and filter client data from the database")
 
@@ -180,6 +203,10 @@ if not df.empty and 'addresses' in df.columns:
     df['city'] = address_info.apply(lambda x: x['city'])
     df['state'] = address_info.apply(lambda x: x['state'])
 
+# Add FUB URL to dataframe
+if not df.empty and 'id' in df.columns:
+    df['fub_url'] = df['id'].apply(create_fub_url)
+    df['fub_link'] = df['fub_url']
 st.header("Dashboard Metrics")
 col1, col2, col3 = st.columns(3)
 
@@ -201,12 +228,13 @@ if not df.empty:
     display_columns = [
         'id', 'fullname', 'created', 'fphone1', 'assigned_employee_name', 
         'city', 'state', 'move_in_date', 'budget', 'budget_max', 
-        'beds', 'baths', 'moving_reason', 'credit_score', 'neighborhood'
+        'beds', 'baths', 'moving_reason', 'credit_score', 'neighborhood', 'fub_link'
     ]
     
+    # Only include columns that exist in the dataframe
     display_columns = [col for col in display_columns if col in df.columns]
-
     st.dataframe(df[display_columns], use_container_width=True)
+
 else:
     st.info("No client data found with the current filters.")
 
@@ -244,6 +272,19 @@ if not df.empty:
             st.write(f"**Assigned Employee:** {client_data['assigned_employee_name']}")
             if 'city' in client_data and 'state' in client_data:
                 st.write(f"**Location:** {client_data['city']}, {client_data['state']}")
+            
+            # Add FUB link in client details
+            if 'fub_url' in client_data:
+                st.markdown(f"**[View in Follow Up Boss]({client_data['fub_url']})**", unsafe_allow_html=True)
+            
+            # Add Find Inventory button
+            if 'id' in client_data:
+                if st.button("Find Inventory For Client"):
+                    success, message = find_inventory_for_client(client_data['id'])
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
         
         with col2:
             st.subheader("Requirements")

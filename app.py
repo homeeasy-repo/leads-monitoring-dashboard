@@ -27,24 +27,35 @@ def get_db_connection():
     return conn
 
 
-def load_client_data(start_date=None, end_date=None, state=None, budget_sort=None, requirements_status=None, employee_type=None):
+def load_client_data(start_date=None, end_date=None, state=None, budget_sort=None, requirements_status=None, employee_type=None, client_stage=None):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     query = """
+    WITH latest_stage AS (
+        SELECT 
+            client_id,
+            current_stage,
+            created_on,
+            ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY created_on DESC) as rn
+        FROM 
+            client_stage_progression
+    )
     SELECT 
         c.id, c.fullname, c.created, c.fphone1, c.assigned_employee_name, c.addresses, c.assigned_employee,
-        r.move_in_date, r.budget, r.budget_max, r.beds, r.baths, r.moving_reason, r.credit_score, r.neighborhood
+        r.move_in_date, r.budget, r.budget_max, r.beds, r.baths, r.moving_reason, r.credit_score, r.neighborhood,
+        ls.current_stage
     FROM 
         client c
     LEFT JOIN 
         requirements r ON c.id = r.client_id
+    LEFT JOIN
+        latest_stage ls ON c.id = ls.client_id AND ls.rn = 1
     WHERE 1=1
     """
     
     params = []
     
-
     if start_date and end_date:
         query += " AND c.created BETWEEN %s AND %s"
         params.extend([start_date, end_date])
@@ -53,12 +64,6 @@ def load_client_data(start_date=None, end_date=None, state=None, budget_sort=Non
         query += " AND c.addresses::text LIKE %s"
         params.append(f'%"state": "{state}"%')
     
-    # if requirements_status == "Requirements Gathered":
-    #     query += " AND r.budget IS NOT NULL AND r.move_in_date IS NOT NULL AND r.moving_reason IS NOT NULL AND r.credit_score IS NOT NULL AND r.neighborhood IS NOT NULL"
-    # elif requirements_status == "Partial Requirements":
-    #     query += " AND r.client_id IS NOT NULL AND (r.budget IS NULL OR r.move_in_date IS NULL OR r.moving_reason IS NULL OR r.credit_score IS NULL OR r.neighborhood IS NULL)"
-    # elif requirements_status == "No Requirements":
-    #     query += " AND r.client_id IS NULL"
     if requirements_status == "Requirements Gathered":
         query += """
             AND r.budget IS NOT NULL AND r.move_in_date IS NOT NULL 
@@ -99,6 +104,11 @@ def load_client_data(start_date=None, end_date=None, state=None, budget_sort=Non
         query += " AND c.assigned_employee IN (317, 318, 319, 410, 415, 416)"
     elif employee_type == "Regular Employees":
         query += " AND (c.assigned_employee IS NULL OR c.assigned_employee NOT IN (317, 318, 319, 410, 415, 416))"
+    
+    if client_stage == "Negative":
+        query += " AND ls.current_stage = 9"
+    elif client_stage == "Positive":
+        query += " AND (ls.current_stage IS NULL OR ls.current_stage != 9)"
     
     if budget_sort == "Low to High":
         query += " ORDER BY r.budget ASC"
@@ -220,6 +230,10 @@ st.sidebar.subheader("Employee Assignment")
 employee_options = ["All", "Amy Accounts", "Regular Employees"]
 employee_type = st.sidebar.selectbox("Employee Type", employee_options)
 
+st.sidebar.subheader("Client Stage")
+client_stage_options = ["None", "Positive", "Negative"]
+client_stage = st.sidebar.selectbox("Client Stage", client_stage_options)
+
 st.sidebar.subheader("Budget Sort")
 budget_sort_options = ["None", "Low to High", "High to Low"]
 budget_sort = st.sidebar.selectbox("Sort by Budget", budget_sort_options)
@@ -230,7 +244,8 @@ df = load_client_data(
     state_selection if state_selection != "All" else None,
     budget_sort if budget_sort != "None" else None,
     requirements_status if requirements_status != "All" else None,
-    employee_type if employee_type != "All" else None
+    employee_type if employee_type != "All" else None,
+    client_stage if client_stage != "All" else None
 )
 
 if not df.empty and 'addresses' in df.columns:

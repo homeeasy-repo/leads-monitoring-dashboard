@@ -27,7 +27,9 @@ def get_db_connection():
     return conn
 
 
-def load_client_data(start_date=None, end_date=None, state=None, budget_sort=None, requirements_status=None, employee_type=None, client_stage=None):
+def load_client_data(start_date=None, end_date=None, state=None, budget_sort=None,
+                     requirements_status=None, employee_type=None, client_stage=None,
+                     deployment_option="Stable"):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -99,21 +101,23 @@ def load_client_data(start_date=None, end_date=None, state=None, budget_sort=Non
                 r.neighborhood IS NULL
             )
         """
-    
-    if employee_type == "Amy Accounts":
-        query += " AND c.assigned_employee IN (317, 318, 319, 410, 415, 416)"
-    elif employee_type == "Regular Employees":
-        query += " AND (c.assigned_employee IS NULL OR c.assigned_employee NOT IN (317, 318, 319, 410, 415, 416))"
-    
-    if client_stage == "Negative":
-        query += " AND ls.current_stage = 9"
-    elif client_stage == "Positive":
-        query += " AND (ls.current_stage IS NULL OR ls.current_stage != 9)"
-    
-    if budget_sort == "Low to High":
-        query += " ORDER BY r.budget ASC"
-    elif budget_sort == "High to Low":
-        query += " ORDER BY r.budget DESC"
+    if deployment_option == "Unstable":
+        query += " AND c.assigned_employee = 410"
+    else:
+        if employee_type == "Amy Accounts":
+            query += " AND c.assigned_employee IN (317, 318, 319, 410, 415, 416, 160, 20)"
+        elif employee_type == "Regular Employees":
+            query += " AND (c.assigned_employee IS NULL OR c.assigned_employee NOT IN (317, 318, 319, 410, 415, 416, 160, 20))"
+        
+        if client_stage == "Negative":
+            query += " AND ls.current_stage = 9"
+        elif client_stage == "Positive":
+            query += " AND (ls.current_stage IS NULL OR ls.current_stage != 9)"
+        
+        if budget_sort == "Low to High":
+            query += " ORDER BY r.budget ASC"
+        elif budget_sort == "High to Low":
+            query += " ORDER BY r.budget DESC"
     
     cursor.execute(query, params)
     results = cursor.fetchall()
@@ -183,6 +187,10 @@ st.markdown("View and filter client data from the database")
 # Sidebar for filters
 st.sidebar.header("Filters")
 
+st.sidebar.subheader("Deployment")
+deployment_option = st.sidebar.selectbox("Select Deployment", ["Stable", "Unstable"])
+
+
 # Date range filter
 st.sidebar.subheader("Date Range")
 date_options = [
@@ -245,7 +253,8 @@ df = load_client_data(
     budget_sort if budget_sort != "None" else None,
     requirements_status if requirements_status != "All" else None,
     employee_type if employee_type != "All" else None,
-    client_stage if client_stage != "All" else None
+    client_stage if client_stage != "All" else None,
+    deployment_option
 )
 
 if not df.empty and 'addresses' in df.columns:

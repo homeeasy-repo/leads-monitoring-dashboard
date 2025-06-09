@@ -1,4 +1,4 @@
-# Client Dashboard
+## Client Dashboard
 
 A Streamlit dashboard for displaying and filtering client data from a database.
 
